@@ -31,10 +31,18 @@ exports.getFAQs = async (req, res) => {
 };
 
 // ✅ Upload PDF and extract text
+// exports.uploadPDF = async (req, res) => {
+//   try {
+//     if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+
+//     const dataBuffer = req.file.buffer;
+//     const pdfData = await pdfParse(dataBuffer);
 exports.uploadPDF = async (req, res) => {
   try {
-    if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+    console.log("Uploaded file:", req.file);  // 👈 add this line
 
+    if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+    
     const dataBuffer = req.file.buffer;
     const pdfData = await pdfParse(dataBuffer);
 

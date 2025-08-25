@@ -7,4 +7,7 @@ const faqSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 });
 
+// ✅ Add text index for better search across question & answer
+faqSchema.index({ question: "text", answer: "text" });
+
 module.exports = mongoose.model("FAQ", faqSchema);

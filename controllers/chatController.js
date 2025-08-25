@@ -2,57 +2,61 @@ const Conversation = require("../models/conversation");
 const FAQ = require("../models/FAQ");
 
 // Send message and get response
+// ✅ put this at the very top of chatController.js
+const escapeRegex = (str) =>
+  str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 exports.sendMessage = async (req, res) => {
   try {
     const { userId, message } = req.body;
-    if (!userId || !message) {
-      return res.status(400).json({ error: "userId and message are required" });
-    }
 
-    // ✅ Save message into conversation
-    let conversation = await Conversation.findOne({ userId });
-    if (!conversation) {
-      conversation = new Conversation({ userId, messages: [] });
-    }
+    // 🔎 Fallback: keyword-based regex search
+    const words = message
+      .split(" ")
+      .map(w => w.trim())
+      .filter(w => w)
+      .map(escapeRegex); // now escapeRegex is always defined
 
-    conversation.messages.push({ sender: "user", text: message });
-    
-    // ✅ Try to find relevant FAQ (very simple search: text match)
-    const faq = await FAQ.findOne({
+    const regexFaqs = await FAQ.find({
       $or: [
-        { question: { $regex: message, $options: "i" } },
-        { answer: { $regex: message, $options: "i" } }
+        { question: { $regex: words.join("|"), $options: "i" } },
+        { answer: { $regex: words.join("|"), $options: "i" } }
       ]
     });
 
-    let botReply;
-    if (faq) {
-      botReply = faq.answer; // reply with saved answer from FAQ/PDF
-    } else {
-      botReply =
-        "I can only answer questions related to the uploaded FAQ content. Please try again with a relevant query.";
-    }
+    const botReply = regexFaqs.length > 0
+      ? regexFaqs.map(f => f.answer).join("\n") // ✅ merge fallback answers too
+      : "I couldn't find relevant info in your resume/FAQ. Please try rephrasing your question.";
 
-    // ✅ Save bot response
-    conversation.messages.push({ sender: "bot", text: botReply });
-    await conversation.save();
+    res.json({ reply: botReply });
 
-    res.json({ reply: botReply, conversation });
   } catch (err) {
-    console.error(err);
+    console.error("❌ Chat error:", err);
     res.status(500).json({ error: err.message });
   }
 };
+
+
 
 // Get chat history
-exports.getHistory = async (req, res) => {
+exports.getChatHistory = async (req, res) => {
   try {
     const { userId } = req.params;
+
     const conversation = await Conversation.findOne({ userId });
-    if (!conversation) return res.json({ messages: [] });
-    res.json(conversation.messages);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: err.message });
+
+    if (!conversation) {
+      return res.json({
+        userId,
+        messages: [],
+        message: "No chat history found."
+      });
+    }
+
+    res.json(conversation);
+  } catch (error) {
+    console.error("❌ Get chat history error:", error);
+    res.status(500).json({ error: error.message });
   }
 };
+
