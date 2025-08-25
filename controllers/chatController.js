@@ -1,62 +1,63 @@
-const Conversation = require("../models/conversation");
-const FAQ = require("../models/FAQ");
+// controllers/chatController.js
+const Conversation = require('../models/Conversation');
+const FAQ = require('../models/FAQ');
 
-// Send message and get response
-// ✅ put this at the very top of chatController.js
-const escapeRegex = (str) =>
-  str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
+// send message
 exports.sendMessage = async (req, res) => {
   try {
     const { userId, message } = req.body;
 
-    // 🔎 Fallback: keyword-based regex search
-    const words = message
-      .split(" ")
-      .map(w => w.trim())
-      .filter(w => w)
-      .map(escapeRegex); // now escapeRegex is always defined
+    // ✅ Step 1: Try FAQ search
+    const faqs = await FAQ.find(
+      { $text: { $search: message } },
+      { score: { $meta: "textScore" } }
+    ).sort({ score: { $meta: "textScore" } });
 
-    const regexFaqs = await FAQ.find({
-      $or: [
-        { question: { $regex: words.join("|"), $options: "i" } },
-        { answer: { $regex: words.join("|"), $options: "i" } }
-      ]
-    });
+    let botReply;
+    if (faqs.length > 0) {
+      botReply = faqs[0].answer;
+    } else {
+      // fallback regex
+      const escapeRegex = (str) =>
+        str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-    const botReply = regexFaqs.length > 0
-      ? regexFaqs.map(f => f.answer).join("\n") // ✅ merge fallback answers too
-      : "I couldn't find relevant info in your resume/FAQ. Please try rephrasing your question.";
+      const words = message
+        .split(" ")
+        .map(w => w.trim())
+        .filter(Boolean)
+        .map(escapeRegex);
+
+      const regexFaqs = await FAQ.find({
+        $or: [
+          { question: { $regex: words.join("|"), $options: "i" } },
+          { answer: { $regex: words.join("|"), $options: "i" } }
+        ]
+      });
+
+      botReply = regexFaqs.length > 0
+        ? regexFaqs.map(f => f.answer).join("\n")
+        : "I couldn't find relevant info in your resume/FAQ. Please try rephrasing your question.";
+    }
+
+    // ✅ save conversation
+    const newConversation = new Conversation({ userId, message, reply: botReply });
+    await newConversation.save();
 
     res.json({ reply: botReply });
-
   } catch (err) {
-    console.error("❌ Chat error:", err);
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: "Internal Server Error" });
   }
 };
 
-
-
-// Get chat history
+// get history
 exports.getChatHistory = async (req, res) => {
   try {
     const { userId } = req.params;
-
-    const conversation = await Conversation.findOne({ userId });
-
-    if (!conversation) {
-      return res.json({
-        userId,
-        messages: [],
-        message: "No chat history found."
-      });
-    }
-
-    res.json(conversation);
-  } catch (error) {
-    console.error("❌ Get chat history error:", error);
-    res.status(500).json({ error: error.message });
+    const history = await Conversation.find({ userId }).sort({ createdAt: 1 });
+    res.json(history);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to fetch history" });
   }
 };
-

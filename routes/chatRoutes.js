@@ -3,9 +3,7 @@ const { sendMessage, getChatHistory } = require('../controllers/chatController')
 
 const router = express.Router();
 
-router.post('/send', sendMessage);              // Send a message
-router.get('/history/:userId', getChatHistory);    // Get chat history
+router.post('/send', sendMessage);
+router.get('/history/:userId', getChatHistory);
 
 module.exports = router;
-
-
