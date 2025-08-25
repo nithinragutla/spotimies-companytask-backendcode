@@ -40,8 +40,20 @@ exports.sendMessage = async (req, res) => {
     }
 
     // ✅ save conversation
-    const newConversation = new Conversation({ userId, message, reply: botReply });
-    await newConversation.save();
+        let conversation = await Conversation.findOne({ userId });
+    if (!conversation) {
+      conversation = new Conversation({
+        userId,
+        messages: [
+          { sender: "user", text: message },
+          { sender: "bot", text: botReply }
+        ]
+      });
+    } else {
+      conversation.messages.push({ sender: "user", text: message });
+      conversation.messages.push({ sender: "bot", text: botReply });
+    }
+    await conversation.save();
 
     res.json({ reply: botReply });
   } catch (err) {
@@ -54,10 +66,12 @@ exports.sendMessage = async (req, res) => {
 exports.getChatHistory = async (req, res) => {
   try {
     const { userId } = req.params;
-    const history = await Conversation.find({ userId }).sort({ createdAt: 1 });
-    res.json(history);
+    const conversation = await Conversation.findOne({ userId });
+    if (!conversation) return res.json({ messages: [] });
+    res.json(conversation.messages);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to fetch history" });
   }
 };
+
